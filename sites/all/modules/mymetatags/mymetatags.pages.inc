@@ -1,5 +1,4 @@
 <?php 
-//teste wallace
 /**
  * Home for my meta tags.
  */
