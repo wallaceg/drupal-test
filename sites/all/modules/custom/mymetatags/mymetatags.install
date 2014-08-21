@@ -1,0 +1,49 @@
+<?php 
+/*
+ * Implements hook_schema
+ */
+function mymetatags_schema(){
+  
+  $schema['mymetatags'] = array(  
+      'description' => 'The base table for my meta tags.',
+      'fields' => array(
+          'mtid' => array(
+              'description' => 'The primary identifier for a my meta tag.',
+              'type' => 'serial',
+              'unsigned' => TRUE,
+              'not null' => TRUE,
+          ),
+          'normal_path' => array(
+              'description' => 'The path of this my meta tag.',
+              'type' => 'varchar',
+              'length' => 255,
+              'not null' => TRUE,
+          ),
+          'data' => array(
+              'description' => 'The data stored for this my meta tag.',
+              'type' => 'text',
+              'size' => 'big',
+              'not null' => TRUE,
+          ),
+      ),
+      'unique keys' => array(
+          'normal_path' => array('normal_path'),
+      ),
+      'primary key' => array('mtid'),
+  );
+  return $schema;
+}
+
+/*
+ * Implements hook_install
+*/  
+function mymetatags_install(){  
+  variable_set('mymetatags',"keywords|description of keywords\ndefinition|description of definition");
+}
+
+/*
+ * Implements hook_uninstall
+*/
+function mymetatags_uninstall(){
+  variable_del('mymetatags');
+}

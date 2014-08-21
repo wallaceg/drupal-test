@@ -1,0 +1,291 @@
+<?php
+
+/*
+ * Implements hook permission
+ */
+function mymetatags_permission() {
+  return array(
+      'manage page meta tags' => array(
+      'title' => t('Manage Page Meta Tags'),
+      'description' => t('Manage meta tags created on pages.'),
+      )
+  );  
+}
+
+/*
+ * Implements hook_menu().
+ */
+function mymetatags_menu() {
+  
+  $items['admin/config/search/mymetatags'] = array(
+      'title'             => t('My Meta Tags List Paths'),
+      'description'       => t('List all paths associated with meta tags'),
+      'page callback'     => 'mymetatags_list',
+      'access arguments'  => array('manage page meta tags'),
+      'type'              => MENU_DEFAULT_LOCAL_TASK,
+      'file'              => 'mymetatags.pages.inc',
+  );
+   
+  $items['admin/config/search/mymetatags/%mymetatags_map'] = array(
+      'title'             => t('My Meta Tags Map'),
+      'description'       => t('List a path map'),
+      'page callback'     => 'mymetatags_map',
+      'page arguments'    => array(4),
+      'access arguments'  => array('manage page meta tags'),
+      'type'              => MENU_CALLBACK,
+  );
+  
+  $items['admin/config/search/mymetatags/%mymetatags_map/delete'] = array(
+      'title'             => t('My Meta Tags Map Delete'),
+      'description'       => t('Delete a path map'),
+      'page callback'     => 'drupal_get_form',
+      'page arguments'    => array('mymetatags_map_delete_confirm', 4),
+      'access arguments'  => array('manage page meta tags'),
+      'type'              => MENU_CALLBACK,
+      'file'              => 'mymetatags.pages.inc',
+  );
+  
+  $items['admin/config/search/mymetatags/form'] = array(
+      'title'             => t('My Meta Tags Form'),
+      'description'       => t('My Meta Tags Form'),
+      'page callback'     => 'mymetatags_form',
+      'access arguments'  => array('manage page meta tags'),
+      'type'              => MENU_CALLBACK,
+      'file'              => 'mymetatags.pages.inc',
+  );
+  
+  $items['admin/config/search/mymetatags/configure'] = array(
+      'title'             => t('My Meta Tags Configuration'),
+      'description'       => t('My Meta Tags Configuration'),
+      'page callback'     => 'drupal_get_form',
+      'page arguments'    => array('mymetatags_configure'),
+      'access arguments'  => array('manage page meta tags'),
+      'type'              => MENU_NORMAL_ITEM,
+      'file'              => 'mymetatags.pages.inc',
+  ); 
+ 
+  
+  return $items;
+}
+
+/**
+ * implements hook_list
+ */
+function mymetatags_mymetatags_list() {
+  
+  $query = 'SELECT * FROM {mymetatags}';
+  $result= db_query($query);
+  
+  $returnArray=array();
+  foreach ($result as $record)  {
+    $returnArray[$record->normal_path]['mtid']        = $record->mtid;
+    $returnArray[$record->normal_path]['normal_path'] = 'admin/config/search/mymetatags/' .$record->mtid . '/mymetatags_map' . drupal_get_path_alias($record->normal_path);
+    $returnArray[$record->normal_path]['tags']        = unserialize($record->data);
+  }
+  return $returnArray;
+}
+
+/**
+ *
+ */
+function mymetatags_map($data) {
+  $form = drupal_get_form('mymetatags_my_form', $data);
+  
+  return $form;
+}
+
+
+
+/**
+ * Implements my_form
+ */
+function mymetatags_my_form($form, $form_state, $args=null){
+  $meta_tags_defined  = unserialize($args->data);
+  if(isset($args) && !isset($args->new)){    
+    $mt_id              = $args->mtid;
+    $normal_path        = ($args->normal_path?$args->normal_path:null);
+    $alias              = drupal_get_path_alias($normal_path);
+    $alias              = ($alias!=$normal_path?$alias:NULL);
+  }else{
+    $mt_id              = null;
+  }
+  
+  $form['mtid'] = array(
+      '#type'           => 'hidden',
+      '#value'          => $mt_id,
+  );
+  
+  if(isset($mt_id)){
+    $form['normal_path'] = array(
+        '#type'           => 'textfield',
+        '#title'          => t('Path'),
+        '#default_value'  => $normal_path,
+        '#attributes'     => array('disabled' => TRUE),
+    ); 
+    
+    $form['alias'] = array(
+        '#type'           => 'textfield',
+        '#title'          => t('Alias'),
+        '#default_value'  => $alias,
+        '#attributes'     => array('disabled' => TRUE),
+    );
+  }
+  
+  $form['meta_tags'] = array(
+      '#type'  => 'fieldset',
+      '#title' => t('Meta Tags'),
+      '#tree'  => TRUE,
+  );
+  
+  foreach ($meta_tags_defined as $key => $value) {
+    $form['meta_tags'][$key] = array(
+        '#type'           => 'textfield',
+        '#title'          => $key,
+        '#default_value'  => $value,
+    );
+    
+    /*$form['meta_tags'][$key. '_delete'] = array(
+        '#type' => 'link',
+        '#title' => t('Delete'),
+        '#href' => 'admin/config/search/mymetatags/%mymetatags_map/delete',
+    );*/
+    
+  }
+  
+  $form['submit'] = array(
+      '#type'           => 'submit',
+      '#value'          => t('Save'),
+      '#ajax' => array(
+          'callback'  => 'ajax_my_form_callback',
+          'wrapper'   => 'my_form-div',
+          'method'    => 'replace',
+          'effect'    => 'fade',
+      ),
+  );
+  
+  $form['response'] = array(
+      '#prefix' => '<div id="my_form-div">',
+      '#suffix' => '</div>',
+  );  
+  
+  return $form;
+}
+
+/**
+ * implements my ajax callback
+ */
+function ajax_my_form_callback($form, $form_state) {
+  return $form['response'];
+}
+
+/**
+ * Implements form_submission
+ * 
+ */
+function mymetatags_my_form_submit($form, $form_state){
+  
+  $has_values = FALSE;
+  foreach ($form_state['values']['meta_tags'] as $key => $value) {
+  	if($value != ''){
+  	  $has_values = TRUE;
+  	}
+  }
+  $mt_id = $form_state['values']['mtid'];
+  if($has_values && isset($mt_id)){
+    
+    $fields = array(
+      'data' => serialize($form_state['values']['meta_tags'])
+    );
+    db_update('{mymetatags}')->fields($fields)->condition('mtid',$mt_id)->execute();
+    drupal_set_message(t('The meta tags has been updated.'));
+  }elseif($has_values && !isset($mt_id)){
+    $fields = array(
+        'normal_path' => $_SESSION['current_path'],
+        'data'        => serialize($form_state['values']['meta_tags'])
+    );
+    db_insert('{mymetatags}')->fields($fields)->execute();
+    drupal_set_message(t('The meta tags has been created.'));      
+  }else{
+    
+    db_delete('{mymetatags}')->condition('mtid',$mt_id)->execute();
+    drupal_set_message(t('The meta tags has been removed for this url.'));
+    
+  }   
+}
+
+/**
+ * Implements hook_load
+ */
+function mymetatags_map_load($mtid){
+  $query = "
+  SELECT  * 
+  FROM    {mymetatags} 
+  WHERE   mtid = :mtid 
+  ";
+  return db_query($query, array(':mtid' => $mtid))->fetchObject();
+}
+
+/**
+ * Implements hook_block_info
+ */
+function mymetatags_block_info(){
+  $blocks['mymetatags'] = array(
+  	'info'        => t('My Meta Tags'),
+    'region'      => 'content',
+    'status'      => 1,
+    'weight'      => 18,        
+    'cache'       => DRUPAL_NO_CACHE,
+    'visibility'  => BLOCK_VISIBILITY_NOTLISTED,
+    'pages'       => "<front>\r\nadmin/*\r\nuser/add*\r\nuser/*\r\nnode/*/add/*\r\nnode/*/delete/*\r\nnode/*/edit/*",
+  );
+  
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view
+ */
+function mymetatags_block_view($delta = ''){
+  $_SESSION['current_path'] = current_path();
+  $block = array();
+  
+  switch ($delta) {
+  	case 'mymetatags':
+  	  if(user_access('manage page meta tags')){
+  	    $block['subject'] = t('Meta Tags');    	  
+  	    $normal_path = $_SESSION['current_path'];
+    	  $query = "
+    	      SELECT *
+    	      FROM   {mymetatags}
+    	      WHERE  normal_path = :normal_path
+    	  ";
+    	  $meta_tags_defined = db_query($query, array(':normal_path' => $normal_path))->fetchObject();
+    	  if(!$meta_tags_defined){
+    	    $meta_tags_defined = new stdClass();
+    	    $meta_tags_defined->data = serialize(array());
+    	    $meta_tags_defined->new = true;
+    	  }
+    	  $meta_tags_defined->data = serialize(array_merge(mymetatags_stored(), unserialize($meta_tags_defined->data)));
+    	  $form = drupal_get_form('mymetatags_my_form', $meta_tags_defined);
+    	  unset($form['normal_path'],$form['alias']);
+    	  $block['content'] = $form;
+  	  }
+  	  break;
+  	
+  }
+  return $block;
+}
+
+/**
+ * returns meta tags saved
+ */
+function mymetatags_stored() {
+  $values  = explode("\n", variable_get('mymetatags'));
+  $array_to_return = array();
+  foreach ($values as $value) {
+    $value = explode("|", $value);
+    $array_to_return[$value[0]] = '';
+  }
+  return $array_to_return;
+}
+
